@@ -55,7 +55,7 @@ pub struct Verifier {
 impl Verifier {
     pub fn new(k: i64, n: i64, d: i64) -> Self {
         {
-            let mut value = SPACE_CHALS.lock().unwrap();    
+            let mut value = SPACE_CHALS.lock().unwrap();
             *value = (n as f64).log2().floor() as i64;
         }
 
