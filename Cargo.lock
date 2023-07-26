@@ -61,6 +61,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "hex",
+ "lazy_static",
  "merkle_light",
  "num-bigint-dig",
  "num-integer",

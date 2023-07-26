@@ -20,9 +20,14 @@ use crate::expanders::{get_bytes, NodeType};
 use crate::tree::{check_index_path, verify_path_proof, PathProof};
 use crate::util::copy_data;
 use crate::{acc, expanders};
+use lazy_static::lazy_static;
+use std::sync::Mutex;
+
+lazy_static! {
+    pub static ref SPACE_CHALS: Mutex<i64> = Mutex::new(22);
+}
 
 pub const MAX_BUF_SIZE: i32 = 1 * 16;
-pub static mut SPACE_CHALS: i64 = 22;
 pub const PICK: i32 = 1;
 
 #[derive(Clone, Debug)]
@@ -49,8 +54,9 @@ pub struct Verifier {
 
 impl Verifier {
     pub fn new(k: i64, n: i64, d: i64) -> Self {
-        unsafe {
-            SPACE_CHALS = (n as f64).log2().floor() as i64;
+        {
+            let mut value = SPACE_CHALS.lock().unwrap();    
+            *value = (n as f64).log2().floor() as i64;
         }
 
         Verifier {
