@@ -92,7 +92,7 @@ impl Verifier {
         !self.nodes.contains_key(&id)
     }
 
-    pub fn logout_prover_node(&self, id: &[u8]) -> Result<(Vec<u8>, i64, i64)> {
+    pub fn logout_prover_node(&mut self, id: &[u8]) -> Result<(Vec<u8>, i64, i64)> {
         let node = self.get_node(id);
 
         match node {
@@ -101,7 +101,8 @@ impl Verifier {
                     Some(record) => (record.acc.clone(), record.front, record.rear),
                     None => panic!("Record not found."),
                 };
-
+                let id = hex::encode(id);
+                self.nodes.remove(&id);
                 Ok((acc, front, rear))
             }
             Err(err) => {
