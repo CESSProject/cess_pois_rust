@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{acc::multi_level_acc::WitnessNode, expanders::NodeType};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Commit {
-    pub file_index: i64,
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Commits {
+    pub file_indexs: Vec<i64>,
     pub roots: Vec<Vec<u8>>,
 }
 

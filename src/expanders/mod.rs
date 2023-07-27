@@ -106,6 +106,20 @@ pub fn get_bytes<T: ToPrimitive>(v: T) -> Vec<u8> {
     bytes
 }
 
+pub fn get_bytes_slice<T: ToPrimitive>(v: &[T]) -> Vec<u8> {
+    let size = mem::size_of::<T>();
+    let mut bytes = Vec::with_capacity(v.len() * size);
+
+    for value in v {
+        let value = value.to_i64().unwrap();
+        for i in 0..size {
+            bytes.push(((value >> (8 * i)) & 0xFF) as u8);
+        }
+    }
+
+    bytes
+}
+
 fn bytes_to_node_value(data: &[u8], max: i64) -> NodeType {
     let v = i64::from_be_bytes(data.try_into().unwrap());
     let v = if v < 0 { -v } else { v };

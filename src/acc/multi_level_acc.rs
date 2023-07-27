@@ -3,12 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{generate_acc, hash_2_prime::h_prime, RsaKey};
 
-// const DEFAULT_PATH: &str = "./acc/";
-// const DEFAULT_DIR_PERM: i32 = 0777;
-// const DEFAULT_ELEMS_NUM: i32 = 1024;
 const DEFAULT_LEVEL: i32 = 3;
-// const DEFAULT_NAME: &str = "sub-acc";
-// const DEFAULT_BACKUP_NAME: &str = "backup-sub-acc";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct WitnessNode {

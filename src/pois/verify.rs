@@ -5,7 +5,7 @@ use sha2::Digest;
 use std::collections::HashMap;
 use std::mem;
 
-use super::prove::{AccProof, Commit, CommitProof, DeletionProof, SpaceProof};
+use super::prove::{AccProof, CommitProof, Commits, DeletionProof, SpaceProof};
 use crate::acc::multi_level_acc::{
     verify_delete_update, verify_insert_update, verify_mutilevel_acc,
 };
@@ -24,11 +24,12 @@ use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 lazy_static! {
-    pub static ref SPACE_CHALS: Mutex<i64> = Mutex::new(22);
+    pub static ref CLUSTER_SIZE: Mutex<i64> = Mutex::new(8);
+    pub static ref SPACE_CHALS: Mutex<i64> = Mutex::new(8);
 }
 
-pub const MAX_BUF_SIZE: i32 = 1 * 16;
-pub const PICK: i32 = 1;
+pub const IDLE_SET_LEN: i64 = 32;
+pub const PICK: i32 = 4;
 
 #[derive(Clone, Debug)]
 pub struct Record {
@@ -38,11 +39,10 @@ pub struct Record {
     pub rear: i64,
     pub record: i64,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct ProverNode {
     pub id: Vec<u8>,
-    pub commit_buf: Vec<Commit>,
-    pub buf_size: i32,
+    pub commit_buf: Commits,
     pub record: Option<Record>,
 }
 
@@ -55,8 +55,11 @@ pub struct Verifier {
 impl Verifier {
     pub fn new(k: i64, n: i64, d: i64) -> Self {
         {
-            let mut value = SPACE_CHALS.lock().unwrap();
-            *value = (n as f64).log2().floor() as i64;
+            let mut space_chals = SPACE_CHALS.lock().unwrap();
+            *space_chals = k;
+
+            let mut cluster_size = CLUSTER_SIZE.lock().unwrap();
+            *cluster_size = k;
         }
 
         Verifier {
@@ -83,7 +86,7 @@ impl Verifier {
         let node = self
             .nodes
             .get(&id)
-            .with_context(|| format!("Node not found."))?;
+            .with_context(|| format!("prover node not found."))?;
         Ok(node)
     }
 
@@ -105,103 +108,98 @@ impl Verifier {
                 self.nodes.remove(&id);
                 Ok((acc, front, rear))
             }
-            Err(err) => {
-                bail!(err);
-            }
+            Err(_) => Ok((vec![], 0, 0)),
         }
     }
 
-    pub fn receive_commits(&mut self, id: &[u8], commits: &mut [Commit]) -> bool {
+    pub fn receive_commits(&mut self, id: &[u8], commits: &Commits) -> bool {
         let id = hex::encode(id);
 
-        let p_node = match self.nodes.get(&id) {
-            Some(node) => node.clone(),
+        match self.nodes.get_mut(&id) {
+            Some(p_node) => {
+                if !p_node.id.eq(&hex::decode(id).unwrap()) {
+                    return false;
+                }
+        
+                for i in 0..commits.file_indexs.len() {
+                    if commits.file_indexs[i] <= p_node.record.as_ref().unwrap().rear {
+                        return false;
+                    }
+                }
+        
+                let root_num;
+                {
+                    let cluster_size = CLUSTER_SIZE.lock().unwrap();
+                    root_num = (*cluster_size + self.expanders.k) * IDLE_SET_LEN + 1;
+                }
+                if commits.roots.len() != root_num as usize {
+                    return false;
+                }
+        
+                let hash = new_hash();
+        
+                let result = match hash {
+                    ExpanderHasher::SHA256(hash) => {
+                        let mut hash = hash;
+                        for j in 0..commits.roots.len() - 1 {
+                            hash.update(commits.roots[j].clone());
+                        }
+        
+                        let result = hash.finalize();
+                        result.to_vec()
+                    }
+                    ExpanderHasher::SHA512(hash) => {
+                        let mut hash = hash;
+                        for j in 0..commits.roots.len() - 1 {
+                            hash.update(commits.roots[j].clone());
+                        }
+        
+                        let result = hash.finalize();
+                        result.to_vec()
+                    }
+                };
+                if !commits.roots[commits.roots.len() - 1].eq(&result) {
+                    return false;
+                }
+        
+                p_node.commit_buf = commits.clone();
+                return true;
+            },
             None => return false,
         };
-
-        if !p_node.id.eq(&hex::decode(id).unwrap()) {
-            return false;
-        }
-
-        if commits.len() > (MAX_BUF_SIZE - p_node.buf_size) as usize {
-            let commits = &mut commits[..(MAX_BUF_SIZE - p_node.buf_size) as usize];
-            return self.validate_commit(&p_node, commits);
-        } else {
-            return self.validate_commit(&p_node, commits);
-        }
     }
 
-    fn validate_commit(&mut self, p_node: &ProverNode, commits: &mut [Commit]) -> bool {
-        let mut p_node = p_node.clone();
-        for i in 0..commits.len() {
-            if commits[i].file_index <= p_node.record.as_ref().unwrap().front {
-                return false;
-            }
-
-            if commits[i].roots.len() != (self.expanders.k + 2) as usize {
-                return false;
-            }
-            // TODO: find a way to reset the hasher instead of creating new object
-            let hash = new_hash();
-            let result = match hash {
-                // TODO: write a generic function for the below task.
-                ExpanderHasher::SHA256(hash) => {
-                    let mut hash = hash;
-                    for j in 0..commits[i].roots.len() - 1 {
-                        hash.update(&commits[i].roots[j]);
-                    }
-
-                    let result = hash.finalize();
-                    result.to_vec()
-                }
-                ExpanderHasher::SHA512(hash) => {
-                    let mut hash = hash;
-                    for j in 0..commits[i].roots.len() - 1 {
-                        hash.update(&commits[i].roots[j]);
-                    }
-
-                    let result = hash.finalize();
-                    result.to_vec()
-                }
-            };
-
-            if commits[i].roots[self.expanders.k as usize + 1] != result[..] {
-                return false;
-            }
-
-            p_node.commit_buf.push(commits[i].clone());
-            p_node.buf_size += 1;
-        }
-        if let Some(node) = self.nodes.get_mut(&hex::encode(&p_node.id)) {
-            *node = p_node;
-        }
-
-        true
-    }
-
-    pub fn commit_challenges(&mut self, id: &[u8], left: i32, right: i32) -> Result<Vec<Vec<i64>>> {
+    pub fn commit_challenges(&mut self, id: &[u8]) -> Result<Vec<Vec<i64>>> {
         let p_node = match self.get_node(id) {
             Ok(node) => node,
             Err(err) => {
-                bail!(err);
+                bail!("generate commit challenges error: {}", err);
             }
         };
 
-        if right - left <= 0 || right > p_node.buf_size || left < 0 {
-            let err = anyhow!("bad file number");
-            bail!("generate commit challenges error: {}", err);
-        }
-        let mut challenges: Vec<Vec<i64>> = Vec::with_capacity((right - left) as usize);
-        let mut rng = rand::thread_rng();
-        for i in left..right {
-            // let idx = i - left;
-            let mut inner_vec = vec![0; self.expanders.k as usize + 2];
-            inner_vec[0] = p_node.commit_buf[i as usize].file_index;
-            let r = rng.gen_range(0..self.expanders.n);
-            inner_vec[1] = r + self.expanders.n * self.expanders.k;
+        let mut challenges: Vec<Vec<i64>> = Vec::with_capacity(IDLE_SET_LEN as usize);
 
-            for j in 2..=(self.expanders.k + 1) as usize {
-                let r = rng.gen_range(0..(self.expanders.d + 1));
+        let mut rng = rand::thread_rng();
+        let cluster_size;
+        {
+            let value = CLUSTER_SIZE.lock().unwrap();
+            cluster_size = *value;
+        }
+        let start = (p_node.commit_buf.file_indexs[0] - 1) / cluster_size;
+        for i in 0..IDLE_SET_LEN {
+            let mut inner_vec = vec![0; (self.expanders.k + cluster_size + 1) as usize];
+            inner_vec[0] = start + i + 1;
+            for j in 1..=cluster_size {
+                let mut r = rng.gen_range(0..self.expanders.n);
+                r += self.expanders.n * self.expanders.k;
+                inner_vec[j as usize] = r;
+            }
+            let mut r = rng.gen_range(0..self.expanders.n);
+            r += self.expanders.n * (self.expanders.k - 1);
+            inner_vec[cluster_size as usize + 1] = r;
+
+            for j in cluster_size as usize + 2..inner_vec.len() {
+                let r = rng.gen_range(0..self.expanders.d + 1);
                 inner_vec[j] = r;
             }
 
@@ -211,6 +209,14 @@ impl Verifier {
     }
 
     pub fn space_challenges(&self, params: i64) -> Result<Vec<i64>> {
+        //Randomly select several nodes from idle files as random challenges
+        let mut params = params;
+        {
+            let space_chals = SPACE_CHALS.lock().unwrap();
+            if params < *space_chals {
+                params = *space_chals;
+            }
+        }
         let mut challenges: Vec<i64> = vec![0; params as usize];
         let mut mp: HashMap<i64, ()> = HashMap::new();
         let mut rng = rand::thread_rng();
@@ -239,11 +245,11 @@ impl Verifier {
         let p_node = match self.get_node(id) {
             Ok(node) => node,
             Err(err) => {
-                bail!(err);
+                bail!("verify commit proofs error: {}", err);
             }
         };
 
-        if chals.len() != proofs.len() || chals.len() > p_node.buf_size as usize {
+        if chals.len() != proofs.len() || chals.len() != IDLE_SET_LEN as usize {
             let err = anyhow!("bad proof data");
             bail!("verify commit proofs error: {}", err);
         }
@@ -252,33 +258,51 @@ impl Verifier {
             bail!("verify commit proofs error {}", err);
         }
 
-        let mut index = 0;
-        for i in 0..p_node.buf_size {
-            if chals[0][0] == p_node.commit_buf[i as usize].file_index {
-                index = i;
-                break;
-            }
-        }
-        let front_side = (mem::size_of::<NodeType>() + id.len() + 8) as i32;
+        let front_size = (mem::size_of::<NodeType>() + id.len() + 8 + 8) as i32;
         let hash_size = HASH_SIZE;
-        let mut label =
-            vec![0; front_side as usize + (self.expanders.d + 1) as usize * hash_size as usize];
-        for i in 0..proofs.len() {
-            if chals[i][1] != proofs[i][0].node.index as i64 {
-                let err = anyhow!("bad expanders node index");
-                bail!("verify commit proofs error {}", err);
-            }
+        let mut label = vec![
+            0;
+            front_size as usize
+                + (self.expanders.d + 1) as usize * hash_size as usize
+                + IDLE_SET_LEN as usize * hash_size as usize
+        ];
 
-            let mut idx: NodeType;
+        let zero = vec![
+            0;
+            (self.expanders.d + 1) as usize * hash_size as usize
+                + IDLE_SET_LEN as usize * hash_size as usize
+        ];
+
+        let cluster_size;
+        {
+            let value = CLUSTER_SIZE.lock().unwrap();
+            cluster_size = *value;
+        }
+        let mut hash: Vec<u8>;
+        let mut idx: NodeType;
+        for i in 0..proofs.len() {
+            for j in 1..cluster_size as usize + 1 {
+                if chals[i][j] != proofs[i][j - 1].node.index as i64 {
+                    let err = anyhow!("bad expanders node index");
+                    bail!("verify commit proofs error {}", err);
+                }
+            }
+            
             for j in 1..chals[i].len() {
-                if j == 1 {
-                    idx = chals[i][1] as NodeType;
+                if j <= cluster_size as usize + 1 {
+                    idx = chals[i][j] as NodeType;
                 } else {
                     idx = proofs[i][j - 2].parents[chals[i][j] as usize].index as NodeType;
                 }
 
-                let layer = idx as i64 / self.expanders.n;
-                let mut root = &p_node.commit_buf[index as usize + i].roots[layer as usize];
+                let layer: i64;
+                if j <= cluster_size as usize {
+                    layer = self.expanders.k + j as i64 - 1;
+                } else {
+                    layer = idx as i64 / self.expanders.n;
+                }
+                let mut root = &p_node.commit_buf.roots[layer as usize * IDLE_SET_LEN as usize
+                    + (chals[i][0] as usize - 1) % IDLE_SET_LEN as usize];
                 let path_proof = PathProof {
                     locs: proofs[i][j - 1].node.locs.clone(),
                     path: proofs[i][j - 1].node.paths.clone(),
@@ -288,33 +312,80 @@ impl Verifier {
                     bail!("verify commit proofs error: {}", err);
                 }
 
-                if proofs[i][j - 1].parents.len() <= 0 {
-                    continue;
+                if layer >= self.expanders.k {
+                    copy_data(
+                        &mut label,
+                        &[
+                            id,
+                            &get_bytes(chals[i][0]),
+                            &get_bytes((chals[i][0] - 1) * cluster_size + j as i64),
+                            &get_bytes(idx),
+                        ],
+                    );
+                } else {
+                    copy_data(
+                        &mut label,
+                        &[
+                            id,
+                            &get_bytes(chals[i][0]),
+                            &get_bytes(0 as i64),
+                            &get_bytes(idx),
+                        ],
+                    );
                 }
 
-                copy_data(&mut label, &[id, &get_bytes(chals[i][0]), &get_bytes(idx)]);
-
-                let mut size = front_side;
-
-                for p in &proofs[i][j - 1].parents {
-                    if p.index as i64 >= layer * self.expanders.n {
-                        root = &p_node.commit_buf[index as usize + i as usize].roots[layer as usize]
-                    } else {
-                        root = &p_node.commit_buf[index as usize + i as usize].roots
-                            [layer as usize - 1]
+                if layer > 0 {
+                    let mut size = front_size;
+                    let mut logical_layer = layer;
+                    if logical_layer > self.expanders.k {
+                        logical_layer = self.expanders.k;
                     }
-                    let path_proof = PathProof {
-                        locs: p.locs.clone(),
-                        path: p.paths.clone(),
-                    };
-                    if !verify_path_proof(root, &p.label, path_proof) {
-                        let err = anyhow!("verify parent path proof error");
-                        bail!("verify commit proofs error: {}", err);
+                    
+                    for p in &proofs[i][j - 1].parents {
+                        if p.index as i64 >= logical_layer * self.expanders.n {
+                            root = &p_node.commit_buf.roots[layer as usize * IDLE_SET_LEN as usize
+                                + (chals[i][0] - 1) as usize % IDLE_SET_LEN as usize]
+                        } else {
+                            root = &p_node.commit_buf.roots[(logical_layer as usize - 1)
+                                * IDLE_SET_LEN as usize
+                                + (chals[i][0] - 1) as usize % IDLE_SET_LEN as usize];
+                        }
+                        let path_proof = PathProof {
+                            locs: p.locs.clone(),
+                            path: p.paths.clone(),
+                        };
+                        if !verify_path_proof(root, &p.label, path_proof) {
+                            let err = anyhow!("verify parent path proof error");
+                            bail!("verify commit proofs error: {}", err);
+                        }
+                        label[(size as usize)..(size + HASH_SIZE) as usize]
+                            .copy_from_slice(&p.label);
+                        size += HASH_SIZE
                     }
-                    label[(size as usize)..(size + HASH_SIZE) as usize].copy_from_slice(&p.label);
-                    size += HASH_SIZE
+
+                    let roots_slice: Vec<&[u8]> = p_node.commit_buf.roots
+                        [(layer as usize - 1) * IDLE_SET_LEN as usize..layer as usize * IDLE_SET_LEN as usize]
+                        .iter()
+                        .map(|v| v.as_slice())
+                        .collect();
+                    copy_data(&mut label[size as usize..], &roots_slice);
+                } else {
+                    copy_data(&mut label[front_size as usize..], &[&zero]);
                 }
-                if !get_hash(&label).eq(&proofs[i][j - 1].node.label) {
+
+                if (chals[i][0] - 1) % IDLE_SET_LEN > 0 {
+                    let data = &mut label.clone();
+                    let idx =
+                        (layer * IDLE_SET_LEN + (chals[i][0] - 1) % IDLE_SET_LEN - 1) as usize;
+                    if idx < p_node.commit_buf.roots.len() {
+                        data.extend_from_slice(&p_node.commit_buf.roots[idx]);
+                    }
+                    hash = get_hash(data);
+                } else {
+                    hash = get_hash(&label);
+                }
+
+                if !hash.eq(&proofs[i][j - 1].node.label) {
                     let err = anyhow!("verify label error");
                     bail!("verify commit proofs error: {}", err);
                 }
@@ -334,13 +405,33 @@ impl Verifier {
         if pick as usize > proofs.len() {
             pick = proofs.len() as i32;
         }
+
+        let mut clusters = vec![0; chals.len()];
+        for i in 0..chals.len() {
+            clusters[i] = chals[i][0];
+        }
+
         let mut rng = rand::thread_rng();
         for _ in 0..pick {
             let r1 = rng.gen_range(0..proofs.len());
             let r2 = rng.gen_range(0..proofs[r1].len());
-            let proof = &proofs[r1][r2];
+
+            let index = r2;
+            let proof = &proofs[r1][index];
             let mut node = expanders::Node::new(proof.node.index);
-            generate_expanders_calc_parents(&self.expanders, &mut node, id, chals[r1][0]);
+            let cluster_size;
+            {
+                let value = CLUSTER_SIZE.lock().unwrap();
+                cluster_size = *value;
+            }
+            if index < cluster_size as usize {
+                let mut data = clusters.clone();
+                data.push(index as i64 + 1);
+                generate_expanders_calc_parents(&self.expanders, &mut node, id, &data);
+            } else {
+                generate_expanders_calc_parents(&self.expanders, &mut node, id, &clusters);
+            }
+
             for j in 0..node.parents.len() {
                 if node.parents[j] != proof.parents[j].index {
                     let err = anyhow!("node relationship mismatch");
@@ -353,69 +444,76 @@ impl Verifier {
 
     pub fn verify_acc(&mut self, id: &[u8], chals: Vec<Vec<i64>>, proof: AccProof) -> Result<()> {
         let id_str = hex::encode(id);
-
-        if let Some(p_node) = self.nodes.get_mut(&id_str) {
-            if chals.len() != proof.indexs.len() || chals.len() > p_node.buf_size as usize {
-                let err = anyhow!("bad proof data");
-                bail!("verify acc proofs error: {}", err);
-            }
-
-            let mut index = 0;
-            for i in 0..p_node.buf_size {
-                if chals[0][0] == p_node.commit_buf[i as usize].file_index {
-                    index = i;
-                    break;
-                }
-            }
-
-            let mut label = vec![0u8; id.len() + 8 + HASH_SIZE as usize];
-
-            for i in 0..chals.len() {
-                if chals[i][0] != proof.indexs[i]
-                    || chals[i][0] != p_node.record.as_ref().unwrap().rear + i as i64 + 1
-                {
-                    let err = anyhow!("bad file index");
-                    bail!("verify acc proofs error: {}", err);
-                }
-
-                copy_data(
-                    &mut label,
-                    &[
-                        id,
-                        &get_bytes(chals[i][0]),
-                        &p_node.commit_buf[i + index as usize].roots[self.expanders.k as usize],
-                    ],
-                );
-
-                if !get_hash(&label).eq(&proof.labels[i]) {
-                    let err = anyhow!("verify file label error");
-                    bail!("verify acc proofs error: {}", err);
-                }
-            }
-
-            if !verify_insert_update(
-                p_node.record.clone().unwrap().key,
-                proof.wit_chains,
-                proof.labels,
-                proof.acc_path.clone(),
-                p_node.record.clone().unwrap().acc,
-            ) {
-                let err = anyhow!("verify muti-level acc error");
-                bail!("verify acc proofs error: {}", err);
-            }
-
-            p_node.record.as_mut().unwrap().acc = proof.acc_path.last().cloned().unwrap();
-            p_node.commit_buf.splice(
-                index as usize..(index as usize + chals.len()) as usize,
-                std::iter::empty(),
-            );
-            p_node.buf_size -= chals.len() as i32;
-            p_node.record.as_mut().unwrap().rear += chals.len() as i64;
-        } else {
-            let err = anyhow!("Prover node not found");
-            bail!("verify acc proofs error: {}", err);
+        let cluster_size;
+        {
+            let value = CLUSTER_SIZE.lock().unwrap();
+            cluster_size = *value;
         }
+        match self.nodes.get_mut(&id_str) {
+            Some(p_node) => {
+                if chals.len() != proof.indexs.len() / cluster_size as usize
+                    || chals.len() != IDLE_SET_LEN as usize
+                {
+                    let err = anyhow!("bad proof data");
+                    bail!("verify acc proofs error: {}", err);
+                }
 
+                let mut label = vec![0u8; id.len() + 8 + HASH_SIZE as usize];
+
+                for i in 0..chals.len() {
+                    for j in 0..cluster_size as usize {
+                        if proof.indexs[i * cluster_size as usize+j] as usize
+                            != (chals[i][0] - 1) as usize * cluster_size as usize + j + 1
+                            || p_node.record.as_ref().unwrap().rear as usize
+                                + i * cluster_size as usize
+                                + j
+                                + 1
+                                != (chals[i][0] - 1) as usize * cluster_size as usize + j + 1
+                        {
+                            let err = anyhow!("bad file index");
+                            bail!("verify acc proofs error: {}", err);
+                        }
+                        copy_data(
+                            &mut label,
+                            &[
+                                id,
+                                &get_bytes((chals[i][0] - 1) * cluster_size + j as i64 + 1),
+                                &p_node.commit_buf.roots
+                                    [(self.expanders.k as usize + j) * IDLE_SET_LEN as usize + i],
+                            ],
+                        );
+
+                        if !get_hash(&label).eq(&proof.labels[i * cluster_size as usize + j]) {
+                            let err = anyhow!("verify file label error");
+                            bail!("verify acc proofs error: {}", err);
+                        }
+                    }
+                }
+
+                if !verify_insert_update(
+                    p_node.record.clone().unwrap().key,
+                    proof.wit_chains,
+                    proof.labels,
+                    proof.acc_path.clone(),
+                    p_node.record.clone().unwrap().acc,
+                ) {
+                    let err = anyhow!("verify muti-level acc error");
+                    bail!("verify acc proofs error: {}", err);
+                }
+
+                let mut record = p_node.record.as_mut().unwrap();
+                record.acc = proof.acc_path.last().cloned().unwrap();
+                p_node.commit_buf = Commits {
+                    ..Default::default()
+                };
+
+                record.rear += chals.len() as i64 * cluster_size;
+            }
+            None => {
+                let err = anyhow!("prover node not found");
+                bail!("verify acc proofs error: {}", err);
+            }
+        }
         Ok(())
     }
 
@@ -507,17 +605,11 @@ impl Verifier {
         let p_node = self
             .nodes
             .get_mut(&id_str)
-            .with_context(|| format!("Prover node not found"))?;
+            .with_context(|| format!("verify deletion proofs error: prover node not found"))?;
 
-        if p_node.buf_size > 0 {
-            let err = anyhow!("commit proof not finished");
-            bail!("verify deletion proofs error: {}", err);
-        }
         let lens = proof.roots.len();
-        if lens
-            > (p_node.record.as_ref().unwrap().rear - p_node.record.as_ref().unwrap().front)
-                as usize
-        {
+        let record = p_node.record.as_ref().unwrap();
+        if lens > (record.rear - record.front) as usize {
             let err = anyhow!("file number out of range");
             bail!("verify deletion proofs error: {}", err);
         }
@@ -528,7 +620,7 @@ impl Verifier {
                 &mut label,
                 &[
                     id,
-                    &get_bytes(p_node.record.as_ref().unwrap().front + i as i64 + 1),
+                    &get_bytes(record.front + i as i64 + 1),
                     &proof.roots[i],
                 ],
             );
@@ -537,11 +629,11 @@ impl Verifier {
         }
 
         if verify_delete_update(
-            p_node.record.as_ref().unwrap().key.clone(),
+            record.key.clone(),
             &mut proof.wit_chain,
             labels,
             proof.acc_path.clone(),
-            &p_node.record.as_ref().unwrap().acc,
+            &record.acc,
         ) {
             let err = anyhow!("verify acc proof error");
             bail!("verify deletion proofs error: {}", err);
@@ -557,8 +649,7 @@ impl ProverNode {
     pub fn new(id: &[u8], key: RsaKey, acc: &[u8], front: i64, rear: i64) -> Self {
         Self {
             id: id.to_vec(),
-            commit_buf: Vec::<Commit>::with_capacity(MAX_BUF_SIZE as usize),
-            buf_size: 0,
+            commit_buf: Default::default(),
             record: Some(Record {
                 acc: acc.to_vec(),
                 front,

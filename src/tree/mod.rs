@@ -33,7 +33,6 @@ pub fn verify_path_proof(root: &[u8], data: &[u8], proof: PathProof) -> bool {
     if data.len() != root.len() {
         return false;
     }
-
     for i in 0..proof.path.len() {
         let hash = new_hash(root.len() as i32);
         data = match hash {
