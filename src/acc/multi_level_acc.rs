@@ -19,7 +19,7 @@ pub fn verify_insert_update(
     accs: Vec<Vec<u8>>,
     acc: Vec<u8>,
 ) -> bool {
-    if exist.is_none() || elems.len() == 0 || accs.len() < DEFAULT_LEVEL as usize {
+    if exist.is_none() || elems.is_empty() || accs.len() < DEFAULT_LEVEL as usize {
         return false;
     }
 
@@ -30,19 +30,19 @@ pub fn verify_insert_update(
 
     // Proof of the witness of accumulator elements,
     // when the element's accumulator does not exist, recursively verify its parent accumulator
-    if !verify_mutilevel_acc(&key, Some(&mut p.clone()), &acc.clone()) {
+    if !verify_mutilevel_acc(&key, Some(&mut p.clone()), &acc) {
         return false;
     }
 
     // Verify that the newly generated accumulators after inserting elements
     // is calculated based on the original accumulators
-    let sub_acc = generate_acc(&key.clone(), &p.elem, elems.clone());
+    let sub_acc = generate_acc(&key, &p.elem, elems);
     if !sub_acc.eq(&Some(accs[0].clone())) {
         return false;
     }
 
     let mut count = 1;
-    let mut p = Some(*exist.unwrap().clone());
+    let mut p = Some(*exist.unwrap());
     let mut sub_acc;
     while let Some(p_node) = p.and_then(|p| p.acc) {
         let p_acc = p_node.acc;
@@ -89,7 +89,7 @@ pub fn verify_delete_update(
     accs: Vec<Vec<u8>>,
     acc: &[u8],
 ) -> bool {
-    if elems.len() == 0 || accs.len() < DEFAULT_LEVEL as usize {
+    if elems.is_empty() || accs.len() < DEFAULT_LEVEL as usize {
         return false;
     }
     if !verify_mutilevel_acc(&key, Some(exist), acc) {
@@ -102,7 +102,7 @@ pub fn verify_delete_update(
     }
     let mut p = exist;
     let mut count = 1;
-    while !p.acc.is_none() {
+    while p.acc.is_some() {
         if accs[count - 1].eq(&key.g.to_bytes_be()) {
             sub_acc = generate_acc(&key, &p.wit, vec![accs[count - 1].clone()]);
         } else {
@@ -115,5 +115,5 @@ pub fn verify_delete_update(
         count += 1;
     }
 
-    return true;
+    true
 }

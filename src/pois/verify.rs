@@ -75,7 +75,7 @@ impl Verifier {
         front: i64,
         rear: i64,
     ) {
-        let node = ProverNode::new(&id, key, acc, front, rear);
+        let node = ProverNode::new(id, key, acc, front, rear);
         let id = hex::encode(id);
         self.nodes.insert(id, node);
     }
@@ -85,7 +85,7 @@ impl Verifier {
         let node = self
             .nodes
             .get(&id)
-            .with_context(|| format!("prover node not found."))?;
+            .with_context(|| "prover node not found.")?;
         Ok(node)
     }
 
@@ -162,10 +162,10 @@ impl Verifier {
                 }
         
                 p_node.commit_buf = commits.clone();
-                return true;
+                true
             },
-            None => return false,
-        };
+            None => false,
+        }
     }
 
     pub fn commit_challenges(&mut self, id: &[u8]) -> Result<Vec<Vec<i64>>> {
@@ -197,9 +197,9 @@ impl Verifier {
             r += self.expanders.n * (self.expanders.k - 1);
             inner_vec[cluster_size as usize + 1] = r;
 
-            for j in cluster_size as usize + 2..inner_vec.len() {
+            for v in inner_vec.iter_mut().skip(cluster_size as usize + 2) {
                 let r = rng.gen_range(0..self.expanders.d + 1);
-                inner_vec[j] = r;
+                *v = r;
             }
 
             challenges.push(inner_vec);
@@ -294,12 +294,11 @@ impl Verifier {
                     idx = proofs[i][j - 2].parents[chals[i][j] as usize].index as NodeType;
                 }
 
-                let layer: i64;
-                if j <= cluster_size as usize {
-                    layer = self.expanders.k + j as i64 - 1;
+                let layer: i64 = if j <= cluster_size as usize {
+                    self.expanders.k + j as i64 - 1
                 } else {
-                    layer = idx as i64 / self.expanders.n;
-                }
+                    idx as i64 / self.expanders.n
+                };
                 let mut root = &p_node.commit_buf.roots[layer as usize * IDLE_SET_LEN as usize
                     + (chals[i][0] as usize - 1) % IDLE_SET_LEN as usize];
                 let path_proof = PathProof {
@@ -327,7 +326,7 @@ impl Verifier {
                         &[
                             id,
                             &get_bytes(chals[i][0]),
-                            &get_bytes(0 as i64),
+                            &get_bytes(0i64),
                             &get_bytes(idx),
                         ],
                     );
@@ -459,15 +458,15 @@ impl Verifier {
 
                 let mut label = vec![0u8; id.len() + 8 + HASH_SIZE as usize];
 
-                for i in 0..chals.len() {
+                for (i, v) in chals.iter().enumerate() {
                     for j in 0..cluster_size as usize {
                         if proof.indexs[i * cluster_size as usize+j] as usize
-                            != (chals[i][0] - 1) as usize * cluster_size as usize + j + 1
+                            != (v[0] - 1) as usize * cluster_size as usize + j + 1
                             || p_node.record.as_ref().unwrap().rear as usize
                                 + i * cluster_size as usize
                                 + j
                                 + 1
-                                != (chals[i][0] - 1) as usize * cluster_size as usize + j + 1
+                                != (v[0] - 1) as usize * cluster_size as usize + j + 1
                         {
                             let err = anyhow!("bad file index");
                             bail!("verify acc proofs error: {}", err);
@@ -476,7 +475,7 @@ impl Verifier {
                             &mut label,
                             &[
                                 id,
-                                &get_bytes((chals[i][0] - 1) * cluster_size + j as i64 + 1),
+                                &get_bytes((v[0] - 1) * cluster_size + j as i64 + 1),
                                 &p_node.commit_buf.roots
                                     [(self.expanders.k as usize + j) * IDLE_SET_LEN as usize + i],
                             ],
@@ -522,7 +521,7 @@ impl Verifier {
         chals: Vec<i64>,
         proof: &mut SpaceProof,
     ) -> Result<()> {
-        if chals.len() <= 0
+        if chals.is_empty()
             || proof.left <= p_node.record.as_ref().unwrap().front
             || p_node.record.as_ref().unwrap().rear + 1 < proof.right
         {
@@ -531,8 +530,8 @@ impl Verifier {
         }
         let mut label: Vec<u8> = vec![0; p_node.id.len() + 8 + HASH_SIZE as usize];
         for i in 0..proof.roots.len() {
-            for j in 0..chals.len() {
-                if chals[j] != proof.proofs[i][j].index as i64 {
+            for (j, v) in chals.iter().enumerate() {
+                if *v != proof.proofs[i][j].index as i64 {
                     let err = anyhow!("bad file index");
                     bail!("verify space proofs error: {}", err);
                 }
@@ -541,7 +540,7 @@ impl Verifier {
                     path: proof.proofs[i][j].paths.clone(),
                 };
 
-                if !check_index_path(chals[j], &path_proof.locs) {
+                if !check_index_path(*v, &path_proof.locs) {
                     let err = anyhow!("verify index path error");
                     bail!("verify space proofs error: {}", err);
                 }
@@ -581,7 +580,7 @@ impl Verifier {
         let p_node = self
             .nodes
             .get_mut(&id_str)
-            .with_context(|| format!("verify deletion proofs error: prover node not found"))?;
+            .with_context(|| "verify deletion proofs error: prover node not found")?;
 
         let lens = proof.roots.len();
         let record = p_node.record.as_ref().unwrap();

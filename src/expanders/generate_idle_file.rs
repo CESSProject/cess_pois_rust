@@ -15,13 +15,14 @@ pub fn new_hash() -> Hasher {
     }
 }
 
-pub fn get_hash(data: &Vec<u8>) -> Vec<u8> {
+pub fn get_hash(data: &[u8]) -> Vec<u8> {
     let hash = new_hash();
-    let mut data = data.clone();
+    let mut data = data;
     if data.is_empty() {
-        data = b"none".to_vec();
+        data = b"none";
     }
-    let result = match hash {
+
+    match hash {
         Hasher::SHA256(hash) => {
             let mut hash = hash;
             hash.update(data);
@@ -34,7 +35,5 @@ pub fn get_hash(data: &Vec<u8>) -> Vec<u8> {
             let result = hash.finalize();
             result.to_vec()
         }
-    };
-
-    return result;
+    }
 }

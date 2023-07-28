@@ -17,20 +17,20 @@ pub fn calc_parents(expanders: &Expanders, node: &mut Node, miner_id: &[u8], cou
         return;
     }
 
-    let base_parent = (layer - 1 * expanders.n) as NodeType;
+    let base_parent = ((layer - 1) * expanders.n) as NodeType;
     let lens = miner_id.len() + 8 * 17 + count.len() * 8;
     let mut content: Vec<u8> = vec![0; lens];
     copy_data(
         &mut content,
-        &[&miner_id, &get_bytes_slice(count), &layer.to_be_bytes()],
+        &[miner_id, &get_bytes_slice(count), &layer.to_be_bytes()],
     );
     node.add_parent(node.index - expanders.n as NodeType);
     let mut plate = vec![vec![]; 16];
 
     for i in (0..expanders.d).step_by(16) {
         // Add index to plate
-        for j in 0..16 {
-            plate[j] = get_bytes(i as i64 + j as i64);
+        for (j, v) in plate.iter_mut().enumerate().take(16) {
+            *v = get_bytes(i  + j as i64);
         }
 
         copy_data(
@@ -39,7 +39,7 @@ pub fn calc_parents(expanders: &Expanders, node: &mut Node, miner_id: &[u8], cou
         );
         let hash = get_hash(&content);
         let mut s = 0;
-        let mut p = NodeType::from(0);
+        let mut p = 0;
 
         let mut j = 0;
         while j < 16 {

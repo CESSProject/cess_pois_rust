@@ -70,22 +70,22 @@ pub fn verify_path_proof(root: &[u8], data: &[u8], proof: PathProof) -> bool {
             }
         };
     }
-    return root.eq(&data);
+    root.eq(&data)
 }
 
 pub fn check_index_path(index: i64, locs: &[u8]) -> bool {
     let mut index = index;
-    for i in 0..locs.len() {
+    for v in locs {
         if (index + 1) % 2 == 0 {
-            if locs[i] != 0 {
+            if *v != 0 {
                 return false;
             }
-        } else if locs[i] != 1 {
+        } else if *v != 1 {
             return false;
         }
         index /= 2;
     }
-    return true;
+    true
 }
 
 pub enum Hasher {

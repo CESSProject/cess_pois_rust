@@ -25,19 +25,17 @@ pub fn rsa_keygen(lambda: usize) -> RsaKey {
 
     let n = pk.n();
     let mut f: BigUint;
-    let g: BigUint;
-
     loop {
         f = rng.gen_biguint(lambda);
         if f.gcd(n) == BigUint::one() {
             break;
         }
     }
-    g = f.modpow(&BigUint::from(2u32), &n.clone());
+    let g = f.modpow(&BigUint::from(2u32), &n.clone());
 
     RsaKey {
         n: n.clone(),
-        g: g.clone(),
+        g,
     }
 }
 

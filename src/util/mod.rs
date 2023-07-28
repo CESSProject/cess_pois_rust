@@ -29,7 +29,7 @@ fn get_key_from_bytes(data: &[u8]) -> RsaKey {
     }
     let nl = u64::from_be_bytes(data[..8].try_into().unwrap());
     let gl = u64::from_be_bytes(data[8..16].try_into().unwrap());
-    if nl <= 0 || gl <= 0 || data.len() - 16 != (nl + gl) as usize {
+    if nl == 0 || gl == 0 || data.len() - 16 != (nl + gl) as usize {
         return acc::rsa_keygen(2048);
     }
     let n = BigUint::from_bytes_be(&data[16..16 + nl as usize]);
