@@ -37,7 +37,6 @@ pub struct Record {
     pub acc: Vec<u8>,
     pub front: i64,
     pub rear: i64,
-    pub record: i64,
 }
 #[derive(Clone, Default, Debug)]
 pub struct ProverNode {
@@ -524,7 +523,7 @@ impl Verifier {
         proof: &mut SpaceProof,
     ) -> Result<()> {
         if chals.len() <= 0
-            || p_node.record.as_ref().unwrap().record + 1 != proof.left
+            || proof.left <= p_node.record.as_ref().unwrap().front
             || p_node.record.as_ref().unwrap().rear + 1 < proof.right
         {
             let err = anyhow!("bad proof data");
@@ -575,29 +574,6 @@ impl Verifier {
             }
         }
         Ok(())
-    }
-
-    pub fn space_verification_handle<'a>(
-        &'a mut self,
-        id: &'a [u8],
-        key: acc::RsaKey,
-        acc: &'a [u8],
-        front: i64,
-        rear: i64,
-    ) -> impl FnMut(&[i64], &mut SpaceProof) -> Result<bool> + 'a {
-        let mut p_node = ProverNode::new(id, key, acc, front, rear);
-
-        move |chals: &[i64], proof: &mut SpaceProof| -> Result<bool> {
-            if let Err(_) = self.verify_space(&mut p_node, chals.to_vec(), proof) {
-                return Ok(false);
-            }
-            p_node.record.as_mut().unwrap().record = proof.right - 1;
-            if p_node.record.as_ref().unwrap().record == p_node.record.as_ref().unwrap().rear {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        }
     }
 
     pub fn verify_deletion(&mut self, id: &[u8], proof: &mut DeletionProof) -> Result<()> {
@@ -655,7 +631,6 @@ impl ProverNode {
                 front,
                 rear,
                 key,
-                record: front,
             }),
         }
     }
