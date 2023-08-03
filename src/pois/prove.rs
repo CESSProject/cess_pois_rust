@@ -22,7 +22,7 @@ pub struct CommitProof {
     pub parents: Vec<MhtProof>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct AccProof {
     pub indexs: Vec<i64>,
     pub labels: Vec<Vec<u8>>,
