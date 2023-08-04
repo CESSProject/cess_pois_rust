@@ -45,26 +45,43 @@ pub fn verify_insert_update(
     }
 
     let mut count = 1;
-    let mut p = Some(*exist.unwrap());
+    let mut p = *exist.unwrap();
     let mut sub_acc;
-    while let Some(p_node) = p.and_then(|p| p.acc) {
-        let p_acc = p_node.acc;
-        if let Some(p_acc_inner) = p_acc {
-            sub_acc = generate_acc(
-                &key,
-                &p_node.wit,
-                vec![accs[count - 1].clone()],
-            );
-            if sub_acc != Some(accs[count].clone()) {
-                println!("verify sub acc error");
-                return false;
-            }
-            p = Some(*p_acc_inner);
-            count += 1;
-        } else {
-            break;
+
+    while p.acc.is_some() {
+        sub_acc = generate_acc(
+            &key,
+            &p.wit,
+            vec![accs[count - 1].clone()],
+        );
+
+        if !sub_acc.eq(&Some(accs[count].to_vec())) {
+            return false
         }
+        p = *p.acc.unwrap();
+        count += 1;
     }
+    
+    // while let Some(p_node) = p.and_then(|p| p.acc) {
+    //     let p_acc = p_node.acc;
+    //     if let Some(p_acc_inner) = p_acc {
+    //         sub_acc = generate_acc(
+    //             &key,
+    //             &p_acc_inner.wit,
+    //             vec![accs[count - 1].clone()],
+    //         );
+    //         if sub_acc != Some(accs[count].clone()) {
+    //             dbg!(sub_acc);
+    //             dbg!(Some(accs[count].clone()));
+    //             println!("verify sub acc error");
+    //             return false;
+    //         }
+    //         p = Some(*p_acc_inner);
+    //         count += 1;
+    //     } else {
+    //         break;
+    //     }
+    // }
 
     true
 }
@@ -112,7 +129,7 @@ pub fn verify_delete_update(
         } else {
             sub_acc = Some(p.wit.clone());
         }
-        if sub_acc.eq(&Some(accs[count].to_vec())) {
+        if !sub_acc.eq(&Some(accs[count].to_vec())) {
             return false;
         }
         p = p.acc.as_mut().unwrap();
