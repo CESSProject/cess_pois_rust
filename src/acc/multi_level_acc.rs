@@ -56,6 +56,7 @@ pub fn verify_insert_update(
         );
 
         if !sub_acc.eq(&Some(accs[count].to_vec())) {
+            println!("verify sub acc error");
             return false
         }
         p = *p.acc.unwrap();
