@@ -20,6 +20,7 @@ pub fn verify_insert_update(
     acc: Vec<u8>,
 ) -> bool {
     if exist.is_none() || elems.is_empty() || accs.len() < DEFAULT_LEVEL as usize {
+        println!("acc wit chain is empty");
         return false;
     }
 
@@ -31,6 +32,7 @@ pub fn verify_insert_update(
     // Proof of the witness of accumulator elements,
     // when the element's accumulator does not exist, recursively verify its parent accumulator
     if !verify_mutilevel_acc(&key, Some(&mut p.clone()), &acc) {
+        println!("verify muti-level acc error");
         return false;
     }
 
@@ -38,6 +40,7 @@ pub fn verify_insert_update(
     // is calculated based on the original accumulators
     let sub_acc = generate_acc(&key, &p.elem, elems);
     if !sub_acc.eq(&Some(accs[0].clone())) {
+        println!("Verify that the newly generated accumulators after inserting elements is calculated based on the original accumulators error");
         return false;
     }
 
@@ -53,6 +56,7 @@ pub fn verify_insert_update(
                 vec![accs[count - 1].clone()],
             );
             if sub_acc != Some(accs[count].clone()) {
+                println!("verify sub acc error");
                 return false;
             }
             p = Some(*p_acc_inner);
