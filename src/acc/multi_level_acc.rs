@@ -38,7 +38,7 @@ pub fn verify_insert_update(
 
     // Verify that the newly generated accumulators after inserting elements
     // is calculated based on the original accumulators
-    let sub_acc = generate_acc(&key, &p.elem, elems);
+    let sub_acc = generate_acc(&key, &exist.as_ref().unwrap().elem, elems);
     if !sub_acc.eq(&Some(accs[0].clone())) {
         println!("Verify that the newly generated accumulators after inserting elements is calculated based on the original accumulators error");
         return false;
