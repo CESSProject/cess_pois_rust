@@ -20,13 +20,6 @@ use crate::expanders::{get_bytes, NodeType};
 use crate::tree::{check_index_path, verify_path_proof, PathProof};
 use crate::util::copy_data;
 use crate::{acc, expanders};
-use lazy_static::lazy_static;
-use std::sync::Mutex;
-
-lazy_static! {
-    pub static ref CLUSTER_SIZE: Mutex<i64> = Mutex::new(8);
-    pub static ref SPACE_CHALS: Mutex<i64> = Mutex::new(8);
-}
 
 pub const IDLE_SET_LEN: i64 = 32;
 pub const PICK: i32 = 4;
@@ -47,21 +40,17 @@ pub struct ProverNode {
 
 #[derive(Clone, Debug)]
 pub struct Verifier {
+    cluster_size: i64,
+    space_chals: i64,
     pub expanders: Expanders,
     pub nodes: HashMap<String, ProverNode>,
 }
 
 impl Verifier {
     pub fn new(k: i64, n: i64, d: i64) -> Self {
-        {
-            let mut space_chals = SPACE_CHALS.lock().unwrap();
-            *space_chals = k;
-
-            let mut cluster_size = CLUSTER_SIZE.lock().unwrap();
-            *cluster_size = k;
-        }
-
         Verifier {
+            cluster_size: k,
+            space_chals: k,
             expanders: Expanders::new(k, n, d),
             nodes: HashMap::new(),
         }
@@ -126,11 +115,7 @@ impl Verifier {
                     }
                 }
         
-                let root_num;
-                {
-                    let cluster_size = CLUSTER_SIZE.lock().unwrap();
-                    root_num = (*cluster_size + self.expanders.k) * IDLE_SET_LEN + 1;
-                }
+                let root_num = (self.cluster_size + self.expanders.k) * IDLE_SET_LEN + 1;
                 if commits.roots.len() != root_num as usize {
                     return false;
                 }
@@ -179,11 +164,7 @@ impl Verifier {
         let mut challenges: Vec<Vec<i64>> = Vec::with_capacity(IDLE_SET_LEN as usize);
 
         let mut rng = rand::thread_rng();
-        let cluster_size;
-        {
-            let value = CLUSTER_SIZE.lock().unwrap();
-            cluster_size = *value;
-        }
+        let cluster_size = self.cluster_size;
         let start = (p_node.commit_buf.file_indexs[0] - 1) / cluster_size;
         for i in 0..IDLE_SET_LEN {
             let mut inner_vec = vec![0; (self.expanders.k + cluster_size + 1) as usize];
@@ -210,12 +191,10 @@ impl Verifier {
     pub fn space_challenges(&self, params: i64) -> Result<Vec<i64>> {
         //Randomly select several nodes from idle files as random challenges
         let mut params = params;
-        {
-            let space_chals = SPACE_CHALS.lock().unwrap();
-            if params < *space_chals {
-                params = *space_chals;
-            }
+        if params < self.space_chals {
+            params = self.space_chals;
         }
+
         let mut challenges: Vec<i64> = vec![0; params as usize];
         let mut mp: HashMap<i64, ()> = HashMap::new();
         let mut rng = rand::thread_rng();
@@ -272,11 +251,7 @@ impl Verifier {
                 + IDLE_SET_LEN as usize * hash_size as usize
         ];
 
-        let cluster_size;
-        {
-            let value = CLUSTER_SIZE.lock().unwrap();
-            cluster_size = *value;
-        }
+        let cluster_size = self.cluster_size;
         let mut hash: Vec<u8>;
         let mut idx: NodeType;
         for i in 0..proofs.len() {
@@ -417,11 +392,7 @@ impl Verifier {
             let index = r2;
             let proof = &proofs[r1][index];
             let mut node = expanders::Node::new(proof.node.index);
-            let cluster_size;
-            {
-                let value = CLUSTER_SIZE.lock().unwrap();
-                cluster_size = *value;
-            }
+            let cluster_size = self.cluster_size;
             if index < cluster_size as usize {
                 let mut data = clusters.clone();
                 data.push(index as i64 + 1);
@@ -442,11 +413,7 @@ impl Verifier {
 
     pub fn verify_acc(&mut self, id: &[u8], chals: Vec<Vec<i64>>, proof: AccProof) -> Result<()> {
         let id_str = hex::encode(id);
-        let cluster_size;
-        {
-            let value = CLUSTER_SIZE.lock().unwrap();
-            cluster_size = *value;
-        }
+        let cluster_size = self.cluster_size;
         match self.nodes.get_mut(&id_str) {
             Some(p_node) => {
                 if chals.len() != proof.indexs.len() / cluster_size as usize
