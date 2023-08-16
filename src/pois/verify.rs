@@ -88,12 +88,19 @@ impl Verifier {
 
         match node {
             Ok(node) => {
-                let (acc, front, rear) = match &node.record {
+                let (mut acc, front, rear) = match &node.record {
                     Some(record) => (record.acc.clone(), record.front, record.rear),
                     None => panic!("Record not found."),
                 };
                 let id = hex::encode(id);
                 self.nodes.remove(&id);
+                if acc.len() < 256 {
+                    let zeros_to_prepend = vec![0; 256 - acc.len()];
+
+                    let new_acc = zeros_to_prepend.into_iter().chain(acc.clone()).collect::<Vec<_>>();
+
+                    acc = new_acc;
+                }
                 Ok((acc, front, rear))
             }
             Err(_) => Ok((vec![], 0, 0)),
