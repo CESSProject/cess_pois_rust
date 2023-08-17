@@ -600,7 +600,7 @@ impl ProverNode {
             id: id.to_vec(),
             commit_buf: Default::default(),
             record: Some(Record {
-                acc: acc.to_vec(),
+                acc: num_bigint_dig::BigUint::from_bytes_be(acc).to_bytes_be(),
                 front,
                 rear,
                 key,
