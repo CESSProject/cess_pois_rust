@@ -97,7 +97,10 @@ impl Verifier {
                 if acc.len() < 256 {
                     let zeros_to_prepend = vec![0; 256 - acc.len()];
 
-                    let new_acc = zeros_to_prepend.into_iter().chain(acc.clone()).collect::<Vec<_>>();
+                    let new_acc = zeros_to_prepend
+                        .into_iter()
+                        .chain(acc.clone())
+                        .collect::<Vec<_>>();
 
                     acc = new_acc;
                 }
@@ -115,27 +118,27 @@ impl Verifier {
                 if !p_node.id.eq(&hex::decode(id).unwrap()) {
                     return false;
                 }
-        
+
                 for i in 0..commits.file_indexs.len() {
                     if commits.file_indexs[i] <= p_node.record.as_ref().unwrap().rear {
                         return false;
                     }
                 }
-        
+
                 let root_num = (self.cluster_size + self.expanders.k) * IDLE_SET_LEN + 1;
                 if commits.roots.len() != root_num as usize {
                     return false;
                 }
-        
+
                 let hash = new_hash();
-        
+
                 let result = match hash {
                     ExpanderHasher::SHA256(hash) => {
                         let mut hash = hash;
                         for j in 0..commits.roots.len() - 1 {
                             hash.update(commits.roots[j].clone());
                         }
-        
+
                         let result = hash.finalize();
                         result.to_vec()
                     }
@@ -144,7 +147,7 @@ impl Verifier {
                         for j in 0..commits.roots.len() - 1 {
                             hash.update(commits.roots[j].clone());
                         }
-        
+
                         let result = hash.finalize();
                         result.to_vec()
                     }
@@ -152,10 +155,10 @@ impl Verifier {
                 if !commits.roots[commits.roots.len() - 1].eq(&result) {
                     return false;
                 }
-        
+
                 p_node.commit_buf = commits.clone();
                 true
-            },
+            }
             None => false,
         }
     }
@@ -268,7 +271,7 @@ impl Verifier {
                     bail!("verify commit proofs error {}", err);
                 }
             }
-            
+
             for j in 1..chals[i].len() {
                 if j <= cluster_size as usize + 1 {
                     idx = chals[i][j] as NodeType;
@@ -320,7 +323,7 @@ impl Verifier {
                     if logical_layer > self.expanders.k {
                         logical_layer = self.expanders.k;
                     }
-                    
+
                     for p in &proofs[i][j - 1].parents {
                         if p.index as i64 >= logical_layer * self.expanders.n {
                             root = &p_node.commit_buf.roots[layer as usize * IDLE_SET_LEN as usize
@@ -343,8 +346,9 @@ impl Verifier {
                         size += HASH_SIZE
                     }
 
-                    let roots_slice: Vec<&[u8]> = p_node.commit_buf.roots
-                        [(layer as usize - 1) * IDLE_SET_LEN as usize..layer as usize * IDLE_SET_LEN as usize]
+                    let roots_slice: Vec<&[u8]> = p_node.commit_buf.roots[(layer as usize - 1)
+                        * IDLE_SET_LEN as usize
+                        ..layer as usize * IDLE_SET_LEN as usize]
                         .iter()
                         .map(|v| v.as_slice())
                         .collect();
@@ -434,7 +438,7 @@ impl Verifier {
 
                 for (i, v) in chals.iter().enumerate() {
                     for j in 0..cluster_size as usize {
-                        if proof.indexs[i * cluster_size as usize+j] as usize
+                        if proof.indexs[i * cluster_size as usize + j] as usize
                             != (v[0] - 1) as usize * cluster_size as usize + j + 1
                             || p_node.record.as_ref().unwrap().rear as usize
                                 + i * cluster_size as usize
@@ -567,11 +571,7 @@ impl Verifier {
             let mut label: Vec<u8> = vec![0; id.len() + 8 + HASH_SIZE as usize];
             copy_data(
                 &mut label,
-                &[
-                    id,
-                    &get_bytes(record.front + i as i64 + 1),
-                    &proof.roots[i],
-                ],
+                &[id, &get_bytes(record.front + i as i64 + 1), &proof.roots[i]],
             );
 
             labels.push(get_hash(&label));
@@ -589,7 +589,7 @@ impl Verifier {
         }
 
         p_node.record.as_mut().unwrap().front += lens as i64;
-
+        p_node.record.as_mut().unwrap().acc = proof.acc_path[proof.acc_path.len() - 1].clone();
         Ok(())
     }
 }

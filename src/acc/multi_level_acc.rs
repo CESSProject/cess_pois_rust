@@ -49,20 +49,16 @@ pub fn verify_insert_update(
     let mut sub_acc;
 
     while p.acc.is_some() {
-        sub_acc = generate_acc(
-            &key,
-            &p.wit,
-            vec![accs[count - 1].clone()],
-        );
+        sub_acc = generate_acc(&key, &p.wit, vec![accs[count - 1].clone()]);
 
         if !sub_acc.eq(&Some(accs[count].to_vec())) {
             println!("verify sub acc error");
-            return false
+            return false;
         }
         p = *p.acc.unwrap();
         count += 1;
     }
-    
+
     // while let Some(p_node) = p.and_then(|p| p.acc) {
     //     let p_acc = p_node.acc;
     //     if let Some(p_acc_inner) = p_acc {

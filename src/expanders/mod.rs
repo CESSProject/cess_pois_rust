@@ -62,7 +62,7 @@ impl Node {
         self.parents
             .copy_within(i as usize + 1..lens - 1, i as usize);
         self.parents[i as usize] = parent;
-        
+
         true
     }
 

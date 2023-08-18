@@ -33,10 +33,7 @@ pub fn rsa_keygen(lambda: usize) -> RsaKey {
     }
     let g = f.modpow(&BigUint::from(2u32), &n.clone());
 
-    RsaKey {
-        n: n.clone(),
-        g,
-    }
+    RsaKey { n: n.clone(), g }
 }
 
 pub fn generate_acc(key: &RsaKey, acc: &[u8], elems: Vec<Vec<u8>>) -> Option<Vec<u8>> {

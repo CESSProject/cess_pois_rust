@@ -30,7 +30,7 @@ pub fn calc_parents(expanders: &Expanders, node: &mut Node, miner_id: &[u8], cou
     for i in (0..expanders.d).step_by(16) {
         // Add index to plate
         for (j, v) in plate.iter_mut().enumerate().take(16) {
-            *v = get_bytes(i  + j as i64);
+            *v = get_bytes(i + j as i64);
         }
 
         copy_data(
