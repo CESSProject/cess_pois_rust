@@ -540,6 +540,7 @@ impl Verifier {
                 let err = anyhow!("verify file label error");
                 bail!("verify space proofs error: {}", err);
             }
+            dbg!(&p_node.record.as_ref().unwrap().key, Some(&mut proof.wit_chains[i]), &p_node.record.as_ref().unwrap().acc);
             //VerifyMutilevelAcc
             if !verify_mutilevel_acc(
                 &p_node.record.as_ref().unwrap().key,
