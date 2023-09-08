@@ -20,6 +20,7 @@ pub struct MhtProof {
 pub struct CommitProof {
     pub node: MhtProof,
     pub parents: Vec<MhtProof>,
+    pub elders: Vec<MhtProof>,
 }
 
 #[derive(Debug, Default)]

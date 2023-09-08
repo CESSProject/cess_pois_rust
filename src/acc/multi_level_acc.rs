@@ -1,9 +1,11 @@
 use num_bigint_dig::BigUint;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::{generate_acc, hash_2_prime::h_prime, RsaKey};
 
 const DEFAULT_LEVEL: i32 = 3;
+const DEFAULT_ELEMS_NUM: i32 = 256;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct WitnessNode {
@@ -59,27 +61,6 @@ pub fn verify_insert_update(
         count += 1;
     }
 
-    // while let Some(p_node) = p.and_then(|p| p.acc) {
-    //     let p_acc = p_node.acc;
-    //     if let Some(p_acc_inner) = p_acc {
-    //         sub_acc = generate_acc(
-    //             &key,
-    //             &p_acc_inner.wit,
-    //             vec![accs[count - 1].clone()],
-    //         );
-    //         if sub_acc != Some(accs[count].clone()) {
-    //             dbg!(sub_acc);
-    //             dbg!(Some(accs[count].clone()));
-    //             println!("verify sub acc error");
-    //             return false;
-    //         }
-    //         p = Some(*p_acc_inner);
-    //         count += 1;
-    //     } else {
-    //         break;
-    //     }
-    // }
-
     true
 }
 
@@ -98,6 +79,36 @@ pub fn verify_mutilevel_acc(key: &RsaKey, wits: Option<&mut WitnessNode>, acc: &
         current_wit = acc_node;
     }
     current_wit.elem.eq(acc)
+}
+
+pub fn verify_mutilevel_acc_for_batch(key: &RsaKey, base_idx: i64, wits: Vec<WitnessNode>, acc: &[u8]) -> bool {
+    let mut sub_acc: Option<Vec<u8>> = None;
+    let default_elems_num = DEFAULT_ELEMS_NUM as i64;
+    for (i, witness) in wits.iter().enumerate() {
+        if let Some(sa) = &sub_acc {
+            if witness.acc.clone().unwrap().elem != *sa {
+                return false;
+            }
+        }
+
+        if (i as i64 + base_idx) % default_elems_num == 0 || i == wits.len() - 1 {
+            if !verify_mutilevel_acc(key, Some(&mut witness.clone()), acc) {
+                return false;
+            }
+            sub_acc = None;
+            continue;
+        }
+
+        let mut rng = rand::thread_rng();
+        if rng.gen_range(0..100) < 50
+            && !verify_acc(key, &witness.acc.clone().unwrap().elem, &witness.elem, &witness.wit)
+        {
+            return false;
+        }
+
+        sub_acc = Some(witness.acc.clone().unwrap().elem.clone());
+    }
+    true
 }
 
 pub fn verify_delete_update(
