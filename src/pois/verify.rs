@@ -21,6 +21,7 @@ use crate::tree::{check_index_path, verify_path_proof, PathProof};
 use crate::util::copy_data;
 use crate::{acc, expanders};
 
+pub const CLUSTER_SIZE: i64 = 8;
 pub const IDLE_SET_LEN: i64 = 32;
 pub const PICK: i32 = 4;
 
@@ -237,7 +238,9 @@ impl Verifier {
             }
         };
 
-        if chals.len() != proofs.len() || chals.len() != IDLE_SET_LEN as usize {
+        if chals.len() != proofs.len() || chals.len() != IDLE_SET_LEN as usize
+            || p_node.commit_buf.file_indexs.len() != (CLUSTER_SIZE * IDLE_SET_LEN) as usize
+            || p_node.commit_buf.roots.len() != ((self.expanders.k + CLUSTER_SIZE) * IDLE_SET_LEN + 1) as usize  {
             let err = anyhow!("bad proof data");
             bail!("verify commit proofs error: {}", err);
         }
