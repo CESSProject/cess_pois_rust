@@ -264,8 +264,8 @@ impl Verifier {
         let cluster_size = self.cluster_size;
         let mut hash: Vec<u8>;
         let mut idx: NodeType;
-        let mut fidx: i64 = 0;
-        for i in 0..proofs.len() {
+        let mut fidx: i64;
+        for i in 0..proofs.len() {           
             for j in 1..cluster_size as usize + 1 {
                 if chals[i][j] != proofs[i][j - 1].node.index as i64 {
                     let err = anyhow!("bad expanders node index");
@@ -274,6 +274,7 @@ impl Verifier {
             }
 
             for j in 1..chals[i].len() {
+                fidx = 0; 
                 if j <= cluster_size as usize + 1 {
                     idx = chals[i][j] as NodeType;
                 } else {
@@ -349,7 +350,7 @@ impl Verifier {
                             path: proofs[i][j-1].elders[l].paths.clone(),
                         };
 
-                        let ridx = ((layer - self.expanders.k/2) as usize/self.expanders.k as usize + 2 * l-1) * IDLE_SET_LEN as usize + (chals[i][0] as usize - 1) % IDLE_SET_LEN as usize;
+                        let ridx = ((layer - self.expanders.k/2) as usize/self.expanders.k as usize + 2 * (l-1)) * IDLE_SET_LEN as usize + (chals[i][0] as usize - 1) % IDLE_SET_LEN as usize;
                         if !verify_path_proof(&p_node.commit_buf.roots[ridx], &proofs[i][j-1].elders[l].label, path_proof) {
                             let err = anyhow!("verify elder node path proof error");
                             bail!("verify commit proofs error: {}", err);
