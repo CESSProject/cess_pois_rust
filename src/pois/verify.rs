@@ -370,7 +370,7 @@ impl Verifier {
                         path: proofs[i][j-1].elders[0].paths.clone(),
                     };
                     let ridx = layer*IDLE_SET_LEN + (chals[i][0]-1) % IDLE_SET_LEN - 1;
-                    if verify_path_proof(&p_node.commit_buf.roots[ridx as usize], &proofs[i][j-1].elders[0].label, path_proof) {
+                    if !verify_path_proof(&p_node.commit_buf.roots[ridx as usize], &proofs[i][j-1].elders[0].label, path_proof) {
                         let err = anyhow!("verify neighbor node path proof error");
                         bail!("verify commit proofs error: {}", err);
                     }
