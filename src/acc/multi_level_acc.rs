@@ -100,7 +100,7 @@ pub fn verify_mutilevel_acc_for_batch(key: &RsaKey, base_idx: i64, wits: Vec<Wit
         }
 
         let mut rng = rand::thread_rng();
-        if rng.gen_range(0..100) < 50
+        if rng.gen_range(0..100) < 25
             && !verify_acc(key, &witness.acc.clone().unwrap().elem, &witness.elem, &witness.wit)
         {
             return false;
