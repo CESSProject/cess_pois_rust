@@ -17,7 +17,7 @@ use crate::expanders::{
     Expanders,
 };
 use crate::expanders::{get_bytes, NodeType};
-use crate::tree::{check_index_path, verify_path_proof, PathProof};
+use crate::tree::{check_index_path, verify_path_proof, PathProof, DEFAULT_HASH_SIZE};
 use crate::util::copy_data;
 use crate::{acc, expanders};
 
@@ -449,7 +449,7 @@ impl Verifier {
                     bail!("verify acc proofs error: {}", err);
                 }
 
-                let mut label = vec![0u8; id.len() + 8 + HASH_SIZE as usize];
+                let mut label = vec![0u8; id.len() + 8 + DEFAULT_HASH_SIZE as usize];
 
                 for (i, v) in chals.iter().enumerate() {
                     for j in 0..cluster_size as usize {
@@ -521,7 +521,7 @@ impl Verifier {
             let err = anyhow!("bad proof data");
             bail!("verify space proofs error: {}", err);
         }
-        let mut label: Vec<u8> = vec![0; p_node.id.len() + 8 + HASH_SIZE as usize];
+        let mut label: Vec<u8> = vec![0; p_node.id.len() + 8 + DEFAULT_HASH_SIZE as usize];
         for i in 0..proof.roots.len() {
             for (j, v) in chals.iter().enumerate() {
                 if *v != proof.proofs[i][j].index as i64 {
@@ -583,7 +583,7 @@ impl Verifier {
         }
         let mut labels: Vec<Vec<u8>> = Vec::new();
         for i in 0..lens {
-            let mut label: Vec<u8> = vec![0; id.len() + 8 + HASH_SIZE as usize];
+            let mut label: Vec<u8> = vec![0; id.len() + 8 + DEFAULT_HASH_SIZE as usize];
             copy_data(
                 &mut label,
                 &[id, &get_bytes(record.front + i as i64 + 1), &proof.roots[i]],

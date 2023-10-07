@@ -6,12 +6,14 @@ pub struct PathProof {
     pub path: Vec<Vec<u8>>,
 }
 
+pub const DEFAULT_HASH_SIZE: u32 = 32;
+
 pub fn verify_path_proof(root: &[u8], data: &[u8], proof: PathProof) -> bool {
     if proof.locs.len() != proof.path.len() {
         return false;
     }
 
-    let hash = new_hash(root.len() as i32);
+    let hash = Hasher::SHA256(Sha256::new());
     let mut data = match hash {
         // TODO: write a generic function for the below task.
         Hasher::SHA256(hash) => {
@@ -34,7 +36,7 @@ pub fn verify_path_proof(root: &[u8], data: &[u8], proof: PathProof) -> bool {
         return false;
     }
     for i in 0..proof.path.len() {
-        let hash = new_hash(root.len() as i32);
+        let hash = Hasher::SHA256(Sha256::new());
         data = match hash {
             // TODO: write a generic function for the below task.
             Hasher::SHA256(hash) => {
@@ -91,12 +93,4 @@ pub fn check_index_path(index: i64, locs: &[u8]) -> bool {
 pub enum Hasher {
     SHA256(Sha256),
     SHA512(Sha512),
-}
-
-pub fn new_hash(size: i32) -> Hasher {
-    match size {
-        32 => Hasher::SHA256(Sha256::new()),
-        64 => Hasher::SHA512(Sha512::new()),
-        _ => Hasher::SHA512(Sha512::new()),
-    }
 }
