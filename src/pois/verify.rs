@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use core::panic;
 use rand::Rng;
-use sha2::Digest;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::mem;
 
@@ -13,7 +13,7 @@ use crate::acc::RsaKey;
 use crate::expanders::generate_idle_file::{get_hash, HASH_SIZE};
 use crate::expanders::{
     generate_expanders::calc_parents as generate_expanders_calc_parents,
-    generate_idle_file::{new_hash, Hasher as ExpanderHasher},
+    generate_idle_file::Hasher as ExpanderHasher,
     Expanders,
 };
 use crate::expanders::{get_bytes, NodeType};
@@ -131,7 +131,7 @@ impl Verifier {
                     return false;
                 }
 
-                let hash = new_hash();
+                let hash = ExpanderHasher::SHA256(Sha256::new());
 
                 let result = match hash {
                     ExpanderHasher::SHA256(hash) => {
