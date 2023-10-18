@@ -45,7 +45,7 @@ impl Node {
         if self.index == parent {
             return false;
         }
-        if self.parents.len() == 0 || self.parents.len() >= self.parents.capacity() {
+        if self.parents.is_empty() || self.parents.len() >= self.parents.capacity() {
             return false;
         }
 
@@ -62,11 +62,12 @@ impl Node {
         self.parents
             .copy_within(i as usize + 1..lens - 1, i as usize);
         self.parents[i as usize] = parent;
-        return true;
+
+        true
     }
 
     pub fn no_parents(&self) -> bool {
-        self.parents.len() == 0
+        self.parents.is_empty()
     }
 
     pub fn parent_in_list(&self, parent: NodeType) -> (i32, bool) {
@@ -90,7 +91,7 @@ impl Node {
         if self.parents[i] < parent {
             i += 1;
         }
-        return (i as i32, false);
+        (i as i32, false)
     }
 }
 
@@ -101,6 +102,20 @@ pub fn get_bytes<T: ToPrimitive>(v: T) -> Vec<u8> {
 
     for i in 0..size {
         bytes[size - 1 - i] = ((value >> (8 * i)) & 0xFF) as u8;
+    }
+
+    bytes
+}
+
+pub fn get_bytes_slice<T: ToPrimitive>(v: &[T]) -> Vec<u8> {
+    let size = mem::size_of::<T>();
+    let mut bytes = Vec::with_capacity(v.len() * size);
+
+    for value in v {
+        let value = value.to_i64().unwrap();
+        for i in 0..size {
+            bytes.push(((value >> (8 * i)) & 0xFF) as u8);
+        }
     }
 
     bytes

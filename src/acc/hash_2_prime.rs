@@ -30,18 +30,6 @@ fn fu(x: &BigUint) -> BigUint {
     temp1.clone()
 }
 
-// pub fn h_prime(u: &BigUint) -> BigUint {
-//     let mut j = fu(u);
-//     let temp = fu(u);
-//     loop {
-//         let prime = &temp + &j;
-//         if probably_prime(&prime, 10) {
-//             return prime;
-//         }
-//         j += BigUint::from_u32(1u32).unwrap();
-//     }
-// }
-
 pub fn h_prime(u: &BigUint) -> BigUint {
     let mut h = Sha512::new();
     h.update(u.to_bytes_be());
