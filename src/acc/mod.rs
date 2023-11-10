@@ -8,7 +8,7 @@ use rsa::{traits::PublicKeyParts, RsaPrivateKey};
 
 use hash_2_prime::h_prime;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct RsaKey {
     pub n: BigUint, //Z/nZ
     pub g: BigUint, // Generator

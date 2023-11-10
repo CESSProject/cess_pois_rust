@@ -25,7 +25,7 @@ pub const CLUSTER_SIZE: i64 = 8;
 pub const IDLE_SET_LEN: i64 = 32;
 pub const PICK: i32 = 4;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Record {
     pub key: acc::RsaKey,
     pub acc: Vec<u8>,
@@ -94,7 +94,16 @@ impl Verifier {
                     None => panic!("Record not found."),
                 };
                 let id = hex::encode(id);
-                self.nodes.remove(&id);
+                
+                let node = self.nodes.get_mut(&id);
+                if let Some(node) = node {
+                    node.commit_buf = Default::default();
+                    if node.record.is_some() {
+                        node.record.as_mut().unwrap().key = Default::default();
+                        node.record.as_mut().unwrap().acc = Default::default(); 
+                    }
+                }
+                
                 if acc.len() < 256 {
                     let zeros_to_prepend = vec![0; 256 - acc.len()];
 
