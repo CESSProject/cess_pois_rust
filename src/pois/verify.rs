@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use dashmap::DashMap;
 use core::panic;
 use rand::Rng;
 use sha2::{Digest, Sha256};
@@ -44,7 +45,7 @@ pub struct Verifier {
     cluster_size: i64,
     space_chals: i64,
     pub expanders: Expanders,
-    pub nodes: HashMap<String, ProverNode>,
+    pub nodes: DashMap<String, ProverNode>,
 }
 
 impl Verifier {
@@ -53,12 +54,12 @@ impl Verifier {
             cluster_size: k,
             space_chals: k,
             expanders: Expanders::new(k, n, d),
-            nodes: HashMap::new(),
+            nodes: DashMap::new(),
         }
     }
 
     pub fn register_prover_node(
-        &mut self,
+        &self,
         id: &[u8],
         key: RsaKey,
         acc: &[u8],
@@ -70,13 +71,14 @@ impl Verifier {
         self.nodes.insert(id, node);
     }
 
-    pub fn get_node(&self, id: &[u8]) -> Result<&ProverNode> {
+    pub fn get_node(&self, id: &[u8]) -> Result<ProverNode> {
         let id = hex::encode(id);
         let node = self
             .nodes
             .get(&id)
             .with_context(|| "prover node not found.")?;
-        Ok(node)
+        let result = node.clone();
+        Ok(result)
     }
 
     pub fn is_logout(&self, id: &[u8]) -> bool {
@@ -84,24 +86,20 @@ impl Verifier {
         !self.nodes.contains_key(&id)
     }
 
-    pub fn logout_prover_node(&mut self, id: &[u8]) -> Result<(Vec<u8>, i64, i64)> {
-        let node = self.get_node(id);
+    pub fn logout_prover_node(&self, id: &[u8]) -> Result<(Vec<u8>, i64, i64)> {
+        let id_str = hex::encode(id);
+        let node = self.nodes.get_mut(&id_str);
 
         match node {
-            Ok(node) => {
+            Some(mut node) => {
                 let (mut acc, front, rear) = match &node.record {
                     Some(record) => (record.acc.clone(), record.front, record.rear),
                     None => panic!("Record not found."),
                 };
-                let id = hex::encode(id);
-                
-                let node = self.nodes.get_mut(&id);
-                if let Some(node) = node {
-                    node.commit_buf = Default::default();
-                    if node.record.is_some() {
-                        node.record.as_mut().unwrap().key = Default::default();
-                        node.record.as_mut().unwrap().acc = Default::default(); 
-                    }
+                node.commit_buf = Default::default();
+                if node.record.is_some() {
+                    node.record.as_mut().unwrap().key = Default::default();
+                    node.record.as_mut().unwrap().acc = Default::default(); 
                 }
                 
                 if acc.len() < 256 {
@@ -116,15 +114,15 @@ impl Verifier {
                 }
                 Ok((acc, front, rear))
             }
-            Err(_) => Ok((vec![], 0, 0)),
+            None => Ok((vec![], 0, 0)),
         }
     }
 
-    pub fn receive_commits(&mut self, id: &[u8], commits: &Commits) -> bool {
+    pub fn receive_commits(&self, id: &[u8], commits: &Commits) -> bool {
         let id = hex::encode(id);
 
         match self.nodes.get_mut(&id) {
-            Some(p_node) => {
+            Some(mut p_node) => {
                 if !p_node.id.eq(&hex::decode(id).unwrap()) {
                     return false;
                 }
@@ -173,13 +171,12 @@ impl Verifier {
         }
     }
 
-    pub fn commit_challenges(&mut self, id: &[u8]) -> Result<Vec<Vec<i64>>> {
-        let p_node = match self.get_node(id) {
-            Ok(node) => node,
-            Err(err) => {
-                bail!("generate commit challenges error: {}", err);
-            }
-        };
+    pub fn commit_challenges(&self, id: &[u8]) -> Result<Vec<Vec<i64>>> {
+        let id_str = hex::encode(id);
+        let p_node = self
+            .nodes
+            .get(&id_str)
+            .with_context(|| "generate commit challenges error: prover node not found.")?;
 
         let mut challenges: Vec<Vec<i64>> = Vec::with_capacity(IDLE_SET_LEN as usize);
 
@@ -240,11 +237,11 @@ impl Verifier {
         chals: Vec<Vec<i64>>,
         proofs: Vec<Vec<CommitProof>>,
     ) -> Result<()> {
-        let p_node = match self.get_node(id) {
-            Ok(node) => node,
-            Err(err) => {
-                bail!("verify commit proofs error: {}", err);
-            }
+        let id_str = hex::encode(id);
+        let p_node = if let Some(value) = self.nodes.get_mut(&id_str) {
+            value
+        } else {
+            bail!("verify commit proofs error : prover node not found.");
         };
 
         if chals.len() != proofs.len() || chals.len() != IDLE_SET_LEN as usize
@@ -446,11 +443,11 @@ impl Verifier {
         Ok(())
     }
 
-    pub fn verify_acc(&mut self, id: &[u8], chals: Vec<Vec<i64>>, proof: AccProof) -> Result<()> {
+    pub fn verify_acc(&self, id: &[u8], chals: Vec<Vec<i64>>, proof: AccProof) -> Result<()> {
         let id_str = hex::encode(id);
         let cluster_size = self.cluster_size;
         match self.nodes.get_mut(&id_str) {
-            Some(p_node) => {
+            Some(mut p_node) => {
                 if chals.len() != proof.indexs.len() / cluster_size as usize
                     || chals.len() != IDLE_SET_LEN as usize
                 {
@@ -500,14 +497,14 @@ impl Verifier {
                     let err = anyhow!("verify muti-level acc error");
                     bail!("verify acc proofs error: {}", err);
                 }
-
-                let record = p_node.record.as_mut().unwrap();
-                record.acc = proof.acc_path.last().cloned().unwrap();
+                
+                // let record = p_node.record.as_mut().unwrap();
+                p_node.record.as_mut().unwrap().acc = proof.acc_path.last().cloned().unwrap();
                 p_node.commit_buf = Commits {
                     ..Default::default()
                 };
 
-                record.rear += chals.len() as i64 * cluster_size;
+                p_node.record.as_mut().unwrap().rear += chals.len() as i64 * cluster_size;
             }
             None => {
                 let err = anyhow!("prover node not found");
@@ -577,9 +574,9 @@ impl Verifier {
         Ok(())
     }
 
-    pub fn verify_deletion(&mut self, id: &[u8], proof: &mut DeletionProof) -> Result<()> {
+    pub fn verify_deletion(&self, id: &[u8], proof: &mut DeletionProof) -> Result<()> {
         let id_str = hex::encode(id);
-        let p_node = self
+        let mut p_node = self
             .nodes
             .get_mut(&id_str)
             .with_context(|| "verify deletion proofs error: prover node not found")?;
