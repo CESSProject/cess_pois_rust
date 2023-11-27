@@ -8,7 +8,7 @@ use std::mem;
 
 use super::prove::{AccProof, CommitProof, Commits, DeletionProof, SpaceProof};
 use crate::acc::multi_level_acc::{
-    verify_delete_update, verify_insert_update, verify_mutilevel_acc,
+    verify_delete_update, verify_insert_update, verify_mutilevel_acc_for_batch
 };
 use crate::acc::RsaKey;
 use crate::expanders::generate_idle_file::{get_hash, HASH_SIZE};
@@ -562,9 +562,10 @@ impl Verifier {
                 bail!("verify space proofs error: {}", err);
             }
             //VerifyMutilevelAcc
-            if !verify_mutilevel_acc(
+            if !verify_mutilevel_acc_for_batch(
                 &p_node.record.as_ref().unwrap().key,
-                Some(&mut proof.wit_chains[i]),
+                proof.left,
+                proof.wit_chains.clone(),
                 &p_node.record.as_ref().unwrap().acc,
             ) {
                 let err = anyhow!("verify acc proof error");
