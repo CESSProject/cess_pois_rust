@@ -561,16 +561,16 @@ impl Verifier {
                 let err = anyhow!("verify file label error");
                 bail!("verify space proofs error: {}", err);
             }
-            //VerifyMutilevelAcc
-            if !verify_mutilevel_acc_for_batch(
-                &p_node.record.as_ref().unwrap().key,
-                proof.left,
-                proof.wit_chains.clone(),
-                &p_node.record.as_ref().unwrap().acc,
-            ) {
-                let err = anyhow!("verify acc proof error");
-                bail!("verify space proofs error: {}", err);
-            }
+        }
+        //VerifyMutilevelAcc
+        if !verify_mutilevel_acc_for_batch(
+            &p_node.record.as_ref().unwrap().key,
+            proof.left,
+            proof.wit_chains.clone(),
+            &p_node.record.as_ref().unwrap().acc,
+        ) {
+            let err = anyhow!("verify acc proof error");
+            bail!("verify space proofs error: {}", err);
         }
         Ok(())
     }
