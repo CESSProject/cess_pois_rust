@@ -127,12 +127,6 @@ impl Verifier {
                     return false;
                 }
 
-                for i in 0..commits.file_indexs.len() {
-                    if commits.file_indexs[i] <= p_node.record.as_ref().unwrap().rear {
-                        return false;
-                    }
-                }
-
                 let root_num = (self.cluster_size + self.expanders.k) * IDLE_SET_LEN + 1;
                 if commits.roots.len() != root_num as usize {
                     return false;
@@ -338,13 +332,15 @@ impl Verifier {
                                 * IDLE_SET_LEN as usize
                                 + (chals[i][0] - 1) as usize % IDLE_SET_LEN as usize];
                         }
-                        let path_proof = PathProof {
-                            locs: p.locs.clone(),
-                            path: p.paths.clone(),
-                        };
-                        if !verify_path_proof(root, &p.label, path_proof) {
-                            let err = anyhow!("verify parent path proof error");
-                            bail!("verify commit proofs error: {}", err);
+                        if p.index%6 == 0 {
+                            let path_proof = PathProof {
+                                locs: p.locs.clone(),
+                                path: p.paths.clone(),
+                            };
+                            if !verify_path_proof(root, &p.label, path_proof) {
+                                let err = anyhow!("verify parent path proof error");
+                                bail!("verify commit proofs error: {}", err);
+                            }
                         }
                         label[(size as usize)..(size + HASH_SIZE) as usize]
                             .copy_from_slice(&p.label);
