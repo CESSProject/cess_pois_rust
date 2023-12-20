@@ -71,6 +71,30 @@ impl Verifier {
         self.nodes.insert(id, node);
     }
 
+    pub fn register_prover_node_empty(
+        &self,
+        id: &[u8]
+    ) {
+        let mut node = ProverNode::default();
+        node.id = id.to_vec();
+        let id = hex::encode(id);
+        self.nodes.insert(id, node);
+    }
+    pub fn update_prover_node_force(
+        &self,
+        id: &[u8],
+        key: RsaKey,
+        acc: &[u8],
+        front: i64,
+        rear: i64,
+    ) {
+        //todo :update node info
+        let mut node = ProverNode::new(id, key, acc, front, rear);
+        let id = hex::encode(id);
+        node.commit_buf=self.nodes.get(&id).unwrap().commit_buf.clone();
+        self.nodes.insert(id, node);
+    }
+
     pub fn get_node(&self, id: &[u8]) -> Result<ProverNode> {
         let id = hex::encode(id);
         let node = self
