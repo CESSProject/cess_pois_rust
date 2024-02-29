@@ -39,10 +39,8 @@ pub fn new_challenge_handle(
         }
         count += 1;
         if l != left || r != right {
-            println!("false");
             return false;
         }
-        println!("true");
         true
     })
 }
