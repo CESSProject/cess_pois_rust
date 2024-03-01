@@ -14,6 +14,7 @@ pub fn new_challenge_handle(
     source.extend_from_slice(miner_id);
     source.extend_from_slice(tee_id);
     source.extend_from_slice(&bytes_chal);
+    source.extend_from_slice(&vec![0; 64]);
 
     let file_num: i64 = 256;
     let group_size: i64 = 16;
@@ -28,7 +29,7 @@ pub fn new_challenge_handle(
 
     Some(move |prior_hash: &[u8], left: i64, right: i64| -> bool {
         if !prior_hash.is_empty() {
-            source.extend_from_slice(&prior_hash);
+            source[front_size..].copy_from_slice(prior_hash);
         }
         let hash = get_hash(&source);
         let v = expanders::bytes_to_node_value(&hash, group_size - 1) as i64;
@@ -44,4 +45,3 @@ pub fn new_challenge_handle(
         true
     })
 }
-
