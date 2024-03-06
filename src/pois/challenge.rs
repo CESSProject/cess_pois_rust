@@ -33,10 +33,10 @@ pub fn new_challenge_handle(
         }
         let hash = get_hash(&source);
         let v = expanders::bytes_to_node_value(&hash, group_size - 1) as i64;
-        let mut l = (start + count * group_size + v) * file_num;
-        let r = (l / file_num) * file_num + 256 + 1;
+        let mut l = (start + count * group_size + v) * file_num + 1;
+        let r = (l / file_num) * file_num + 256;
         if l < front {
-            l = front;
+            l = front + 1;
         }
         count += 1;
         if l != left || r != right {
