@@ -14,7 +14,7 @@ pub fn new_challenge_handle(
     source.extend_from_slice(miner_id);
     source.extend_from_slice(tee_id);
     source.extend_from_slice(&bytes_chal);
-    source.extend_from_slice(&vec![0; 64]);
+    source.extend_from_slice(&[0; 64]);
 
     let file_num: i64 = 256;
     let group_size: i64 = 16;
