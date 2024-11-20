@@ -630,7 +630,7 @@ impl Verifier {
             labels.push(get_hash(&label));
         }
 
-        if verify_delete_update(
+        if !verify_delete_update(
             record.key.clone(),
             &mut proof.wit_chain,
             labels,
