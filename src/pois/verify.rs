@@ -1,3 +1,17 @@
+//! # Verifier Logic for Proof Validation
+//!
+//! This module implements the **verifier-side logic** for validating all proofs
+//! produced by prover nodes in the system.
+//!
+//! It is responsible for:
+//! - Managing prover node state
+//! - Issuing challenges
+//! - Verifying commit, accumulator, space, and deletion proofs
+//! - Enforcing consistency across Merkle trees, expander graphs,
+//!   and RSA accumulators
+//!
+//! The verifier acts as the central authority that ensures correctness,
+//! soundness, and freshness of all submitted proofs.
 use anyhow::{anyhow, bail, Context, Result};
 use core::panic;
 use dashmap::DashMap;
@@ -21,33 +35,64 @@ use crate::tree::{check_index_path, verify_path_proof, PathProof, DEFAULT_HASH_S
 use crate::util::{add_data, copy_data};
 use crate::{acc, expanders};
 
+/// Number of files per cluster.
 pub const CLUSTER_SIZE: i64 = 8;
+/// Number of idle sets used for commit challenges.
 pub const IDLE_SET_LEN: i64 = 32;
+/// Number of random dependency checks.
 pub const PICK: i32 = 4;
 
+/// Persistent record associated with a prover node.
+///
+/// Tracks accumulator state and valid storage range.
 #[derive(Clone, Default, Debug)]
 pub struct Record {
+    /// RSA accumulator public parameters.
     pub key: acc::RsaKey,
+
+    /// Current accumulator value.
     pub acc: Vec<u8>,
+
+    /// Lower bound of valid file indices.
     pub front: i64,
+
+    /// Upper bound of valid file indices.
     pub rear: i64,
 }
+
+/// State maintained for each registered prover node.
 #[derive(Clone, Default, Debug)]
 pub struct ProverNode {
+    /// Prover identifier.
     pub id: Vec<u8>,
+
+    /// Commit buffer containing Merkle roots and indices.
     pub commit_buf: Commits,
+
+    /// Optional accumulator and range record.
     pub record: Option<Record>,
 }
 
+/// Verifier instance.
+///
+/// Holds global parameters and all registered prover nodes.
 #[derive(Clone, Debug)]
 pub struct Verifier {
+    /// Cluster size used for commit grouping.
     cluster_size: i64,
+
+    /// Number of space challenges per round.
     space_chals: i64,
+
+    /// Expander graph configuration.
     pub expanders: Expanders,
+
+    /// Concurrent map of prover nodes indexed by hex-encoded ID.
     pub nodes: DashMap<String, ProverNode>,
 }
 
 impl Verifier {
+    /// Creates a new verifier with the given expander parameters.
     pub fn new(k: i64, n: i64, d: i64) -> Self {
         Verifier {
             cluster_size: k,
@@ -57,12 +102,14 @@ impl Verifier {
         }
     }
 
+    /// Registers a prover node with full accumulator state.
     pub fn register_prover_node(&self, id: &[u8], key: RsaKey, acc: &[u8], front: i64, rear: i64) {
         let node = ProverNode::new(id, key, acc, front, rear);
         let id = hex::encode(id);
         self.nodes.insert(id, node);
     }
 
+    /// Registers a prover node without accumulator state.
     pub fn register_prover_node_empty(&self, id: &[u8]) {
         let node = ProverNode {
             id: id.to_vec(),
@@ -71,6 +118,8 @@ impl Verifier {
         let id = hex::encode(id);
         self.nodes.insert(id, node);
     }
+
+    /// Force-updates a prover node’s accumulator state.
     pub fn update_prover_node_force(
         &self,
         id: &[u8],
@@ -86,6 +135,7 @@ impl Verifier {
         self.nodes.insert(id, node);
     }
 
+    /// Retrieves a prover node by identifier.
     pub fn get_node(&self, id: &[u8]) -> Result<ProverNode> {
         let id = hex::encode(id);
         let node = self
@@ -96,11 +146,13 @@ impl Verifier {
         Ok(result)
     }
 
+    /// Checks whether a prover node is logged out.
     pub fn is_logout(&self, id: &[u8]) -> bool {
         let id = hex::encode(id);
         !self.nodes.contains_key(&id)
     }
 
+    /// Logs out a prover node and returns its final accumulator state.
     pub fn logout_prover_node(&self, id: &[u8]) -> Result<(Vec<u8>, i64, i64)> {
         let id_str = hex::encode(id);
         let node = self.nodes.get_mut(&id_str);
@@ -133,6 +185,7 @@ impl Verifier {
         }
     }
 
+    /// Receives and validates commit roots from a prover.
     pub fn receive_commits(&self, id: &[u8], commits: &Commits) -> bool {
         let id = hex::encode(id);
 
@@ -180,6 +233,7 @@ impl Verifier {
         }
     }
 
+    /// Generates commit challenges for a prover.
     pub fn commit_challenges(&self, id: &[u8]) -> Result<Vec<Vec<i64>>> {
         let id_str = hex::encode(id);
         let p_node = self
@@ -214,6 +268,7 @@ impl Verifier {
         Ok(challenges)
     }
 
+    /// Generates random space challenges.
     pub fn space_challenges(&self, params: i64) -> Result<Vec<i64>> {
         //Randomly select several nodes from idle files as random challenges
         let mut params = params;
@@ -240,6 +295,11 @@ impl Verifier {
         Ok(challenges)
     }
 
+    /// Verifies commit proofs against issued challenges.
+    ///
+    /// This is one of the most critical verification routines,
+    /// combining expander graph checks, Merkle path proofs,
+    /// and deterministic label recomputation.
     pub fn verify_commit_proofs(
         &self,
         id: &[u8],
@@ -419,6 +479,7 @@ impl Verifier {
         Ok(())
     }
 
+    /// Verifies expander node dependencies probabilistically.
     pub fn verify_node_dependencies(
         &self,
         id: &[u8],
@@ -474,6 +535,7 @@ impl Verifier {
         Ok(())
     }
 
+     /// Verifies RSA accumulator insertion proofs.
     pub fn verify_acc(&self, id: &[u8], chals: Vec<Vec<i64>>, proof: AccProof) -> Result<()> {
         let id_str = hex::encode(id);
         let cluster_size = self.cluster_size;
@@ -545,6 +607,7 @@ impl Verifier {
         Ok(())
     }
 
+    /// Verifies space proofs.
     pub fn verify_space(
         &self,
         p_node: &ProverNode,
@@ -648,6 +711,7 @@ impl Verifier {
 }
 
 impl ProverNode {
+    /// Creates a new prover node with accumulator state.
     pub fn new(id: &[u8], key: RsaKey, acc: &[u8], front: i64, rear: i64) -> Self {
         Self {
             id: id.to_vec(),

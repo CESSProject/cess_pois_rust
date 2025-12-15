@@ -1,5 +1,41 @@
+//! # Challenge Verification Handle
+//!
+//! This module provides a factory function for constructing
+//! **stateful challenge-verification closures** used in expander-
+//! based proof protocols.
+//!
+//! The generated closure deterministically derives expected
+//! challenge ranges based on:
+//! - Miner identity
+//! - TEE identity
+//! - Challenge parameters
+//! - Previous hash output
+//!
+//! It is designed to be invoked sequentially and maintains
+//! internal state across invocations.
+
 use crate::expanders::{self, generate_idle_file::get_hash};
 
+/// Creates a new challenge verification handle.
+///
+/// The returned closure validates whether a given `(left, right)`
+/// range matches the expected challenge range derived from
+/// cryptographic hashing and expander-based indexing.
+///
+/// The closure is **stateful** and must be called sequentially
+/// in the correct order.
+///
+/// # Parameters
+/// - `miner_id`: Unique miner identifier
+/// - `tee_id`: Trusted execution environment identifier
+/// - `chal`: Challenge parameters
+/// - `front`: Start index of the challenge range
+/// - `rear`: End index of the challenge range
+/// - `proof_num`: Maximum number of proof rounds
+///
+/// # Returns
+/// - `Some(closure)` if parameters are valid
+/// - `None` if the number of required rounds exceeds `proof_num`
 pub fn new_challenge_handle(
     miner_id: &[u8],
     tee_id: &[u8],

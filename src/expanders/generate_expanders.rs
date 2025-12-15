@@ -1,11 +1,52 @@
+//! # Stacked Expanders Construction Utilities
+//!
+//! This module provides helper functions for constructing and
+//! initializing **stacked expander graphs**.
+//!
+//! It includes:
+//! - Creation of expander graph configurations
+//! - Deterministic parent selection for nodes
+//!
+//! These utilities are typically used in graph-based proof systems
+//! and storage or computation verification protocols where
+//! deterministic yet pseudo-random connectivity is required.
+
 use sha2::{Digest, Sha512};
 
 use super::{Expanders, Node, NodeType};
 
+/// Constructs a stacked expander configuration.
+///
+/// This is a convenience wrapper around [`Expanders::new`].
+///
+/// # Parameters
+/// - `k`: Number of stacked expander layers
+/// - `n`: Number of nodes per layer
+/// - `d`: Expansion degree (number of parents per node)
+///
+/// # Returns
+/// An initialized [`Expanders`] configuration.
 pub fn construct_stacked_expanders(k: i64, n: i64, d: i64) -> Expanders {
     Expanders::new(k, n, d)
 }
 
+/// Computes and assigns parent nodes for a given node.
+///
+/// Parent selection is deterministic and derived from:
+/// - Miner identifier
+/// - Layer index
+/// - Node index
+/// - Expansion parameters
+///
+/// Cryptographic hashing (SHA-512) is used to ensure
+/// pseudo-random yet reproducible parent distribution.
+///
+/// # Parameters
+/// - `expanders`: Expander graph configuration
+/// - `node`: Node whose parents will be populated
+/// - `miner_id`: Unique miner identifier
+/// - `count`: Global counter value
+/// - `rlayer`: Real layer index (used for layered expansion)
 pub fn calc_parents(
     expanders: &Expanders,
     node: &mut Node,

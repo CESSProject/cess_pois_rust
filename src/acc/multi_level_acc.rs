@@ -1,19 +1,69 @@
+//! # Multi-Level RSA Accumulator Verification
+//!
+//! This module implements verification logic for **multi-level RSA accumulators**,
+//! supporting both insertion and deletion update proofs.
+//!
+//! It provides:
+//! - Witness structures for accumulator chains
+//! - Recursive and batched verification routines
+//! - Deterministic prime-based exponent verification
+//!
+//! These APIs are intended for cryptographic protocols where accumulator updates
+//! must be verifiable without revealing the full set of accumulated elements.
+
 use num_bigint_dig::BigUint;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::{generate_acc, hash_2_prime::h_prime, RsaKey};
 
+/// Default number of accumulator levels.
+///
+/// This value determines the minimum depth required
+/// for multi-level accumulator verification.
 const DEFAULT_LEVEL: i32 = 3;
+
+/// Default number of elements per batch.
+///
+/// Used by batch verification to amortize
+/// verification cost over large witness sets.
 const DEFAULT_ELEMS_NUM: i32 = 256;
 
+/// A node in a multi-level accumulator witness chain.
+///
+/// Each node represents:
+/// - An element or accumulator value
+/// - Its corresponding witness
+/// - An optional parent accumulator node
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct WitnessNode {
+    /// Element value or accumulator value at this level.
     pub elem: Vec<u8>,
+
+    /// Witness proving membership at this level.
     pub wit: Vec<u8>,
+
+    /// Optional parent accumulator witness node.
     pub acc: Option<Box<WitnessNode>>,
 }
 
+/// Verifies an insertion update for a multi-level accumulator.
+///
+/// This function validates that:
+/// - The provided witness chain is well-formed
+/// - The accumulator membership proof is valid
+/// - The newly generated accumulators are derived correctly
+///   from the original accumulator
+///
+/// # Parameters
+/// - `key`: RSA accumulator public parameters
+/// - `exist`: Existing witness chain
+/// - `elems`: Elements inserted at the lowest level
+/// - `accs`: Newly generated accumulator values
+/// - `acc`: Final accumulator value
+///
+/// # Returns
+/// `true` if the update proof is valid, `false` otherwise.
 pub fn verify_insert_update(
     key: RsaKey,
     exist: Option<Box<WitnessNode>>,
@@ -64,12 +114,20 @@ pub fn verify_insert_update(
     true
 }
 
+/// Verifies a single accumulator membership proof.
+///
+/// Checks whether `wit^H(u) mod n == acc`.
 fn verify_acc(key: &RsaKey, acc: &[u8], u: &[u8], wit: &[u8]) -> bool {
     let e = h_prime(&BigUint::from_bytes_be(u));
     let dash = BigUint::from_bytes_be(wit).modpow(&e, &key.n);
     dash == BigUint::from_bytes_be(acc)
 }
 
+/// Verifies a complete multi-level accumulator witness chain.
+///
+/// This function recursively verifies each witness level,
+/// ensuring that every accumulator is derived correctly
+/// from its child witness.
 pub fn verify_mutilevel_acc(key: &RsaKey, wits: Option<&mut WitnessNode>, acc: &[u8]) -> bool {
     let mut current_wit = wits.unwrap();
     while let Some(acc_node) = &mut current_wit.acc {
@@ -81,6 +139,16 @@ pub fn verify_mutilevel_acc(key: &RsaKey, wits: Option<&mut WitnessNode>, acc: &
     current_wit.elem.eq(acc)
 }
 
+/// Performs batched verification of multi-level accumulator witnesses.
+///
+/// This function probabilistically verifies intermediate witnesses
+/// to reduce computational overhead while maintaining soundness.
+///
+/// # Parameters
+/// - `key`: RSA accumulator public parameters
+/// - `base_idx`: Starting index offset
+/// - `wits`: Collection of witness chains
+/// - `acc`: Final accumulator value
 pub fn verify_mutilevel_acc_for_batch(
     key: &RsaKey,
     base_idx: i64,
@@ -121,6 +189,10 @@ pub fn verify_mutilevel_acc_for_batch(
     true
 }
 
+/// Verifies a deletion update for a multi-level accumulator.
+///
+/// Ensures that removing elements results in valid accumulator
+/// transitions across all levels.
 pub fn verify_delete_update(
     key: RsaKey,
     exist: &mut WitnessNode,
